@@ -8,7 +8,8 @@
       "mcp__plugin_playwright_playwright__browser_take_screenshot",
       "mcp__plugin_playwright_playwright__browser_click",
       "Bash(npm install *)",
-      "Bash(npm ls *)"
+      "Bash(npm ls *)",
+      "mcp__plugin_playwright_playwright__browser_snapshot"
     ]
   }
 }
