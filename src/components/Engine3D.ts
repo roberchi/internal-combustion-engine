@@ -194,6 +194,34 @@ export class Engine3DRenderer {
       this.gasMaterial,
     );
     this.scene.add(this.gasFill);
+
+    // PMS / PMI reference lines and labels
+    const wristPinTDC = this.crankCenterY + this.crankRadius + this.conrodLen;
+    const pistonTopTDC = wristPinTDC + this.pistonH / 2 - 0.1;
+    const wristPinBDC = this.crankCenterY - this.crankRadius + this.conrodLen;
+    const pistonTopBDC = wristPinBDC + this.pistonH / 2 - 0.1;
+
+    this.addRefRing(pistonTopTDC, 'PMS');
+    this.addRefRing(pistonTopBDC, 'PMI');
+  }
+
+  private addRefRing(y: number, label: string) {
+    const segments = 64;
+    const r = this.cylRadius + 0.25;
+    const pts: THREE.Vector3[] = [];
+    for (let i = 0; i <= segments; i++) {
+      const a = (i / segments) * Math.PI * 2;
+      pts.push(new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r));
+    }
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    const mat = new THREE.LineDashedMaterial({ color: 0x999999, dashSize: 0.15, gapSize: 0.1 });
+    const line = new THREE.Line(geo, mat);
+    line.computeLineDistances();
+    this.scene.add(line);
+
+    const sprite = makeTextSprite(label);
+    sprite.position.set(r + 0.35, y, 0);
+    this.scene.add(sprite);
   }
 
   update(state: CycleState, t: number) {
@@ -316,6 +344,24 @@ export class Engine3DRenderer {
       }
     });
   }
+}
+
+function makeTextSprite(text: string): THREE.Sprite {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 48;
+  const ctx = canvas.getContext('2d')!;
+  ctx.font = 'bold 28px Roboto, sans-serif';
+  ctx.fillStyle = '#9ca3af';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 64, 24);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = THREE.LinearFilter;
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(1.0, 0.375, 1);
+  return sprite;
 }
 
 function lerpColor(a: number, b: number, t: number): number {
