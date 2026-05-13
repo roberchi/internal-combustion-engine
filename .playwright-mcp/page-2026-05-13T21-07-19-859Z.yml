@@ -1,0 +1,75 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - img [ref=e8]
+        - heading "Arianna POC" [level=6] [ref=e10]
+      - generic [ref=e11]:
+        - link "Dashboard" [ref=e12] [cursor=pointer]:
+          - /url: /
+        - link "Simulation History" [ref=e13] [cursor=pointer]:
+          - /url: /simulation-history
+      - generic [ref=e14]:
+        - button "Settings" [ref=e15] [cursor=pointer]:
+          - img [ref=e16]
+        - generic [ref=e18]: OP
+  - generic [ref=e19]:
+    - generic [ref=e20]:
+      - generic:
+        - generic:
+          - generic [ref=e21]:
+            - button "Zoom in" [ref=e22] [cursor=pointer]: +
+            - button "Zoom out" [ref=e23] [cursor=pointer]: −
+          - generic [ref=e24]:
+            - link "Leaflet" [ref=e25] [cursor=pointer]:
+              - /url: https://leafletjs.com
+              - img [ref=e26]
+              - text: Leaflet
+            - text: "| © OpenStreetMap contributors"
+    - generic [ref=e30]:
+      - generic [ref=e31]:
+        - heading "Devices" [level=5] [ref=e32]
+        - generic [ref=e33]:
+          - generic "Refresh devices" [ref=e34]:
+            - button [disabled]:
+              - img
+          - 'button "Tracking filter: all devices" [ref=e35] [cursor=pointer]':
+            - img [ref=e36]
+          - button [ref=e38] [cursor=pointer]:
+            - img [ref=e39]
+      - generic [ref=e42]:
+        - img [ref=e43]
+        - textbox "Search devices or type /tag" [ref=e46]
+      - generic [ref=e47]:
+        - group [ref=e48]:
+          - button "All" [pressed] [ref=e49] [cursor=pointer]
+          - button "Real 0" [ref=e50] [cursor=pointer]:
+            - generic [ref=e51]:
+              - img [ref=e52]
+              - generic [ref=e54]:
+                - generic [ref=e55]: Real
+                - generic [ref=e56]: "0"
+          - button "Simulated 0" [ref=e57] [cursor=pointer]:
+            - generic [ref=e58]:
+              - img [ref=e59]
+              - generic [ref=e61]:
+                - generic [ref=e62]: Simulated
+                - generic [ref=e63]: "0"
+        - group [ref=e64]:
+          - button "All" [pressed] [ref=e65] [cursor=pointer]
+          - button "Online 0" [ref=e66] [cursor=pointer]:
+            - generic [ref=e67]:
+              - generic [ref=e68]: Online
+              - generic [ref=e69]: "0"
+          - button "Offline 0" [ref=e70] [cursor=pointer]:
+            - generic [ref=e71]:
+              - generic [ref=e72]: Offline
+              - generic [ref=e73]: "0"
+      - generic [ref=e74]:
+        - progressbar [ref=e75]:
+          - img [ref=e76]
+        - paragraph [ref=e78]: Loading devices...
+    - generic [ref=e81]:
+      - heading "No device" [level=5] [ref=e82]
+      - button [ref=e83] [cursor=pointer]:
+        - img [ref=e84]

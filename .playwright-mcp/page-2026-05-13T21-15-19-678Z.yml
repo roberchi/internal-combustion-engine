@@ -1,0 +1,39 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - heading "Motore a Combustione Interna — Ciclo Otto" [level=1] [ref=e5]
+    - paragraph [ref=e6]: Simulazione interattiva del ciclo a 4 tempi
+  - generic [ref=e11]:
+    - generic [ref=e12]:
+      - button "P–V" [ref=e13] [cursor=pointer]
+      - button "P–T" [ref=e14] [cursor=pointer]
+      - button "T–V" [ref=e15] [cursor=pointer]
+    - img [ref=e17]
+  - generic [ref=e19]:
+    - generic [ref=e20]:
+      - generic [ref=e21]:
+        - generic [ref=e22]: Pressione
+        - text: 21.67 P₀
+      - generic [ref=e23]:
+        - generic [ref=e24]: Temperatura
+        - text: 722 K
+      - generic [ref=e25]:
+        - generic [ref=e26]: Volume
+        - text: 0.111 V₀
+      - generic [ref=e27]:
+        - generic [ref=e28]: Lavoro / Calore
+        - text: W > 0 utile (espansione)
+    - generic [ref=e29]:
+      - generic [ref=e30]: Scoppio
+      - paragraph [ref=e31]: "La candela scocca la scintilla al PMS: la combustione isocora (a volume costante) porta pressione e temperatura al massimo. Segue l'espansione adiabatica che spinge il pistone verso il PMI — è l'unica fase che produce lavoro utile."
+  - generic [ref=e33]:
+    - generic [ref=e34]:
+      - button "Avvia" [ref=e45] [cursor=pointer]
+      - slider [ref=e36]: "500"
+    - generic [ref=e37]:
+      - generic [ref=e38]: "Velocità: ×1.0"
+      - slider [ref=e39]: "1"
+      - generic [ref=e40]:
+        - button "Aspirazione" [ref=e41] [cursor=pointer]
+        - button "Compressione" [ref=e42] [cursor=pointer]
+        - button "Scoppio" [active] [ref=e43] [cursor=pointer]
+        - button "Scarico" [ref=e44] [cursor=pointer]
