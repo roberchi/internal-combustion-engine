@@ -2,13 +2,6 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { CycleState, Phase } from '../lib/thermodynamics';
 
-const PHASE_COLORS_HEX: Record<Phase, number> = {
-  intake: 0x3b82f6,
-  compression: 0xf59e0b,
-  power: 0xef4444,
-  exhaust: 0x8b5cf6,
-};
-
 export class Engine3DRenderer {
   private renderer: THREE.WebGLRenderer;
   private scene: THREE.Scene;
@@ -16,7 +9,6 @@ export class Engine3DRenderer {
   private controls: OrbitControls;
   private animId = 0;
 
-  // Engine parts
   private piston!: THREE.Mesh;
   private pistonRings: THREE.Mesh[] = [];
   private conrod!: THREE.Mesh;
@@ -31,25 +23,27 @@ export class Engine3DRenderer {
   private sparkFlash!: THREE.PointLight;
   private gasFill!: THREE.Mesh;
   private gasMaterial!: THREE.MeshPhysicalMaterial;
-  private cylinderWalls!: THREE.Mesh;
 
-  // Dimensions
+  // Kinematically consistent dimensions
+  //   stroke = 2 * crankRadius
+  //   At TDC (angle=0): wristPinY = crankCenterY + crankRadius + conrodLen
+  //   At BDC (angle=π): wristPinY = crankCenterY - crankRadius + conrodLen
   private readonly cylRadius = 1.2;
   private readonly cylHeight = 4.0;
   private readonly pistonH = 0.6;
-  private readonly strokeLen = 2.2;
-  private readonly tdcY: number;
   private readonly crankRadius = 1.1;
-  private readonly conrodLen = 2.4;
-  private readonly crankCenterY: number;
+  private readonly conrodLen = 3.0;
+  // Place crank center so that piston top at TDC ≈ cylHeight/2 - 0.3
+  // wristPinTDC = crankCenterY + R + L → pistonTopTDC ≈ wristPinTDC + pistonH/2 - 0.1
+  // pistonTopTDC = crankCenterY + R + L + pistonH/2 - 0.1 = cylHeight/2 - 0.3
+  // crankCenterY = cylHeight/2 - 0.3 - R - L - pistonH/2 + 0.1
+  private readonly crankCenterY =
+    4.0 / 2 - 0.3 - 1.1 - 3.0 - 0.6 / 2 + 0.1; // = -2.6
 
   private state: CycleState = { V: 1, P: 1, T: 300, phase: 'intake', phaseProgress: 0 };
   private tVal = 0;
 
   constructor(private container: HTMLDivElement) {
-    this.tdcY = this.cylHeight / 2 - 0.3;
-    this.crankCenterY = -this.cylHeight / 2 - 1.6;
-
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setClearColor(0x000000, 0);
@@ -65,7 +59,7 @@ export class Engine3DRenderer {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
-    this.controls.target.set(0, 0, 0);
+    this.controls.target.set(0, -0.5, 0);
     this.controls.minDistance = 4;
     this.controls.maxDistance = 16;
 
@@ -88,133 +82,117 @@ export class Engine3DRenderer {
   }
 
   private buildEngine() {
-    // Cylinder walls — transparent glass
+    const metalMat = new THREE.MeshStandardMaterial({ color: 0x778899, metalness: 0.7, roughness: 0.3 });
+
+    // Cylinder walls
     const cylGeo = new THREE.CylinderGeometry(this.cylRadius, this.cylRadius, this.cylHeight, 32, 1, true);
     const cylMat = new THREE.MeshPhysicalMaterial({
-      color: 0x88aacc,
-      metalness: 0.1,
-      roughness: 0.05,
-      transparent: true,
-      opacity: 0.18,
-      side: THREE.DoubleSide,
-      depthWrite: false,
+      color: 0x88aacc, metalness: 0.1, roughness: 0.05,
+      transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false,
     });
-    this.cylinderWalls = new THREE.Mesh(cylGeo, cylMat);
-    this.scene.add(this.cylinderWalls);
+    this.scene.add(new THREE.Mesh(cylGeo, cylMat));
 
-    // Cylinder head (top cap)
+    // Cylinder head
     const headGeo = new THREE.CylinderGeometry(this.cylRadius + 0.15, this.cylRadius + 0.15, 0.25, 32);
-    const metalMat = new THREE.MeshStandardMaterial({ color: 0x778899, metalness: 0.7, roughness: 0.3 });
     const head = new THREE.Mesh(headGeo, metalMat);
     head.position.y = this.cylHeight / 2 + 0.125;
     this.scene.add(head);
 
     // Piston
     const pistonGeo = new THREE.CylinderGeometry(this.cylRadius - 0.06, this.cylRadius - 0.06, this.pistonH, 32);
-    const pistonMat = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.8, roughness: 0.25 });
-    this.piston = new THREE.Mesh(pistonGeo, pistonMat);
+    this.piston = new THREE.Mesh(pistonGeo, new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.8, roughness: 0.25 }));
     this.scene.add(this.piston);
 
     // Piston rings
     const ringMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.9, roughness: 0.2 });
     for (let i = 0; i < 3; i++) {
-      const ringGeo = new THREE.TorusGeometry(this.cylRadius - 0.04, 0.035, 8, 32);
-      const ring = new THREE.Mesh(ringGeo, ringMat);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(this.cylRadius - 0.04, 0.035, 8, 32), ringMat);
       ring.rotation.x = Math.PI / 2;
       this.pistonRings.push(ring);
       this.scene.add(ring);
     }
 
-    // Wrist pin
-    const wpGeo = new THREE.CylinderGeometry(0.08, 0.08, 1.6, 12);
-    const wpMat = new THREE.MeshStandardMaterial({ color: 0xbbbbbb, metalness: 0.8, roughness: 0.2 });
-    const wristPin = new THREE.Mesh(wpGeo, wpMat);
-    wristPin.rotation.z = Math.PI / 2;
-    this.piston.add(wristPin);
-    wristPin.position.y = -this.pistonH / 2 + 0.1;
+    // Wrist pin (child of piston)
+    const wp = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.08, 0.08, 1.6, 12),
+      new THREE.MeshStandardMaterial({ color: 0xbbbbbb, metalness: 0.8, roughness: 0.2 }),
+    );
+    wp.rotation.z = Math.PI / 2;
+    wp.position.y = -this.pistonH / 2 + 0.1;
+    this.piston.add(wp);
 
-    // Connecting rod
-    const conrodGeo = new THREE.CylinderGeometry(0.1, 0.12, this.conrodLen, 8);
-    const conrodMat = new THREE.MeshStandardMaterial({ color: 0x777777, metalness: 0.7, roughness: 0.3 });
-    this.conrod = new THREE.Mesh(conrodGeo, conrodMat);
+    // Connecting rod — geometry length = conrodLen, origin at center
+    this.conrod = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.1, 0.12, this.conrodLen, 8),
+      new THREE.MeshStandardMaterial({ color: 0x777777, metalness: 0.7, roughness: 0.3 }),
+    );
     this.scene.add(this.conrod);
 
     // Crankshaft main shaft
-    const shaftGeo = new THREE.CylinderGeometry(0.15, 0.15, 3.5, 16);
-    this.crankShaft = new THREE.Mesh(shaftGeo, metalMat.clone());
-    this.crankShaft.rotation.z = Math.PI / 2;
+    this.crankShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 3.5, 16), metalMat.clone());
+    this.crankShaft.rotation.x = Math.PI / 2;
     this.crankShaft.position.y = this.crankCenterY;
     this.scene.add(this.crankShaft);
 
     // Crank arm
-    const armGeo = new THREE.BoxGeometry(0.25, this.crankRadius, 0.5);
-    const armMat = new THREE.MeshStandardMaterial({ color: 0x666666, metalness: 0.8, roughness: 0.3 });
-    this.crankArm = new THREE.Mesh(armGeo, armMat);
+    this.crankArm = new THREE.Mesh(
+      new THREE.BoxGeometry(0.25, this.crankRadius, 0.5),
+      new THREE.MeshStandardMaterial({ color: 0x666666, metalness: 0.8, roughness: 0.3 }),
+    );
     this.scene.add(this.crankArm);
 
     // Crank pin
     const cpGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.6, 12);
-    cpGeo.rotateZ(Math.PI / 2);
-    const cpMat = new THREE.MeshStandardMaterial({ color: 0xddaa00, metalness: 0.8, roughness: 0.2 });
-    this.crankPin = new THREE.Mesh(cpGeo, cpMat);
+    cpGeo.rotateX(Math.PI / 2);
+    this.crankPin = new THREE.Mesh(cpGeo, new THREE.MeshStandardMaterial({ color: 0xddaa00, metalness: 0.8, roughness: 0.2 }));
     this.scene.add(this.crankPin);
 
-    // Crankcase outline
-    const caseGeo = new THREE.CylinderGeometry(this.cylRadius + 0.3, this.cylRadius + 0.6, 2.0, 32, 1, true);
-    const caseMat = new THREE.MeshStandardMaterial({
-      color: 0x667788,
-      metalness: 0.5,
-      roughness: 0.4,
-      transparent: true,
-      opacity: 0.25,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
-    const crankcase = new THREE.Mesh(caseGeo, caseMat);
+    // Crankcase
+    const caseH = this.crankRadius * 2 + 1.2;
+    const crankcase = new THREE.Mesh(
+      new THREE.CylinderGeometry(this.cylRadius + 0.3, this.cylRadius + 0.6, caseH, 32, 1, true),
+      new THREE.MeshStandardMaterial({ color: 0x667788, metalness: 0.5, roughness: 0.4, transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthWrite: false }),
+    );
     crankcase.position.y = this.crankCenterY;
     this.scene.add(crankcase);
 
     // Valves
-    const valveStemGeo = new THREE.CylinderGeometry(0.05, 0.05, 1.2, 8);
-    const valveDiscGeo = new THREE.CylinderGeometry(0.25, 0.25, 0.08, 16);
-    const intakeValveMat = new THREE.MeshStandardMaterial({ color: 0x2563eb, metalness: 0.6, roughness: 0.3 });
-    const exhaustValveMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, metalness: 0.6, roughness: 0.3 });
+    const stemGeo = new THREE.CylinderGeometry(0.05, 0.05, 1.2, 8);
+    const discGeo = new THREE.CylinderGeometry(0.25, 0.25, 0.08, 16);
     const stemMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.8, roughness: 0.2 });
 
-    this.intakeValveStem = new THREE.Mesh(valveStemGeo, stemMat);
+    this.intakeValveStem = new THREE.Mesh(stemGeo, stemMat);
     this.intakeValveStem.position.set(-0.5, this.cylHeight / 2 + 0.6, 0);
     this.scene.add(this.intakeValveStem);
-    this.intakeValveDisc = new THREE.Mesh(valveDiscGeo, intakeValveMat);
+    this.intakeValveDisc = new THREE.Mesh(discGeo, new THREE.MeshStandardMaterial({ color: 0x2563eb, metalness: 0.6, roughness: 0.3 }));
     this.scene.add(this.intakeValveDisc);
 
-    this.exhaustValveStem = new THREE.Mesh(valveStemGeo.clone(), stemMat);
+    this.exhaustValveStem = new THREE.Mesh(stemGeo.clone(), stemMat);
     this.exhaustValveStem.position.set(0.5, this.cylHeight / 2 + 0.6, 0);
     this.scene.add(this.exhaustValveStem);
-    this.exhaustValveDisc = new THREE.Mesh(valveDiscGeo.clone(), exhaustValveMat);
+    this.exhaustValveDisc = new THREE.Mesh(discGeo.clone(), new THREE.MeshStandardMaterial({ color: 0xdc2626, metalness: 0.6, roughness: 0.3 }));
     this.scene.add(this.exhaustValveDisc);
 
     // Spark plug
-    const spBodyGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.8, 8);
-    const spMat = new THREE.MeshStandardMaterial({ color: 0xddaa00, metalness: 0.7, roughness: 0.3 });
-    this.sparkPlug = new THREE.Mesh(spBodyGeo, spMat);
+    this.sparkPlug = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.08, 0.08, 0.8, 8),
+      new THREE.MeshStandardMaterial({ color: 0xddaa00, metalness: 0.7, roughness: 0.3 }),
+    );
     this.sparkPlug.position.set(0, this.cylHeight / 2 + 0.5, 0.4);
     this.scene.add(this.sparkPlug);
 
-    // Spark flash light
     this.sparkFlash = new THREE.PointLight(0xffcc00, 0, 4);
-    this.sparkFlash.position.set(0, this.tdcY, 0);
+    this.sparkFlash.position.set(0, this.cylHeight / 2 - 0.3, 0);
     this.scene.add(this.sparkFlash);
 
-    // Gas fill volume (cylinder inside)
-    const gasGeo = new THREE.CylinderGeometry(this.cylRadius - 0.1, this.cylRadius - 0.1, 1, 32);
+    // Gas fill
     this.gasMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x3b82f6,
-      transparent: true,
-      opacity: 0.15,
-      side: THREE.DoubleSide,
-      depthWrite: false,
+      color: 0x3b82f6, transparent: true, opacity: 0.15, side: THREE.DoubleSide, depthWrite: false,
     });
-    this.gasFill = new THREE.Mesh(gasGeo, this.gasMaterial);
+    this.gasFill = new THREE.Mesh(
+      new THREE.CylinderGeometry(this.cylRadius - 0.1, this.cylRadius - 0.1, 1, 32),
+      this.gasMaterial,
+    );
     this.scene.add(this.gasFill);
   }
 
@@ -227,9 +205,19 @@ export class Engine3DRenderer {
     const { phase, phaseProgress } = this.state;
     const t = this.tVal;
 
-    // Piston position
-    const pistonFrac = this.pistonPosition(t);
-    const pistonY = this.tdcY - pistonFrac * this.strokeLen;
+    // --- Crank kinematics (Y-up coordinate system) ---
+    // angle=0 → crank pin at TOP of circle (closest to piston) → piston at TDC
+    const crankAngle = t * 4 * Math.PI;
+    const cpX = Math.sin(crankAngle) * this.crankRadius;
+    const cpY = this.crankCenterY + Math.cos(crankAngle) * this.crankRadius;
+
+    // Wrist pin: constrained to x=0, connected to crank pin by rod of fixed length
+    // conrodLen² = cpX² + (wristPinY - cpY)²  →  wristPinY = cpY + √(L² - cpX²)
+    const wristPinY = cpY + Math.sqrt(this.conrodLen * this.conrodLen - cpX * cpX);
+
+    // Piston center: wrist pin sits at pistonH/2 - 0.1 below piston center
+    const pistonY = wristPinY + this.pistonH / 2 - 0.1;
+
     this.piston.position.y = pistonY;
 
     // Piston rings
@@ -237,43 +225,33 @@ export class Engine3DRenderer {
       this.pistonRings[i].position.set(0, pistonY + this.pistonH / 2 - 0.1 - i * 0.15, 0);
     }
 
-    // Crank angle
-    const crankAngle = t * 4 * Math.PI;
-    const cpX = Math.sin(crankAngle) * this.crankRadius;
-    const cpY = this.crankCenterY - Math.cos(crankAngle) * this.crankRadius;
-
+    // Crank pin
     this.crankPin.position.set(cpX, cpY, 0);
 
-    // Crank arm
+    // Crank arm: connects crank center to crank pin
     this.crankArm.position.set(cpX / 2, (this.crankCenterY + cpY) / 2, 0);
-    this.crankArm.rotation.z = Math.atan2(cpX, -(cpY - this.crankCenterY));
-    this.crankArm.scale.y = Math.sqrt(cpX * cpX + (cpY - this.crankCenterY) ** 2) / this.crankRadius;
+    this.crankArm.rotation.z = -crankAngle;
 
-    // Connecting rod
-    const wristY = pistonY - this.pistonH / 2 + 0.1;
-    const midX = cpX / 2;
-    const midY = (wristY + cpY) / 2;
-    const rodLen = Math.sqrt(cpX * cpX + (wristY - cpY) ** 2);
-    const rodAngle = Math.atan2(cpX, -(cpY - wristY));
+    // Connecting rod: connects crank pin (cpX, cpY) to wrist pin (0, wristPinY)
+    // Length is always conrodLen — no scaling needed
+    const conrodMidX = cpX / 2;
+    const conrodMidY = (cpY + wristPinY) / 2;
+    const conrodAngle = Math.atan2(cpX, wristPinY - cpY);
 
-    this.conrod.position.set(midX, midY, 0);
-    this.conrod.rotation.z = rodAngle;
-    this.conrod.scale.y = rodLen / this.conrodLen;
+    this.conrod.position.set(conrodMidX, conrodMidY, 0);
+    this.conrod.rotation.z = conrodAngle;
+    this.conrod.scale.y = 1; // never scale
 
     // Valves
-    const intakeOpen = phase === 'intake';
-    const exhaustOpen = phase === 'exhaust';
-    const intakeOffset = intakeOpen ? -0.4 : 0;
-    const exhaustOffset = exhaustOpen ? -0.4 : 0;
-
+    const intakeOffset = phase === 'intake' ? -0.4 : 0;
+    const exhaustOffset = phase === 'exhaust' ? -0.4 : 0;
     this.intakeValveStem.position.y = this.cylHeight / 2 + 0.6 + intakeOffset;
     this.intakeValveDisc.position.set(-0.5, this.cylHeight / 2 + intakeOffset, 0);
     this.exhaustValveStem.position.y = this.cylHeight / 2 + 0.6 + exhaustOffset;
     this.exhaustValveDisc.position.set(0.5, this.cylHeight / 2 + exhaustOffset, 0);
 
-    // Spark flash
-    const firing = phase === 'power' && phaseProgress < 0.08;
-    this.sparkFlash.intensity = firing ? 8 : 0;
+    // Spark
+    this.sparkFlash.intensity = (phase === 'power' && phaseProgress < 0.08) ? 8 : 0;
 
     // Gas fill
     const gasTop = this.cylHeight / 2 - 0.15;
@@ -304,19 +282,6 @@ export class Engine3DRenderer {
         this.gasMaterial.color.setHex(0x887766);
         this.gasMaterial.opacity = 0.1 * (1 - phaseProgress);
         break;
-    }
-  }
-
-  private pistonPosition(t: number): number {
-    const tc = ((t % 1) + 1) % 1;
-    const pi = Math.min(3, Math.floor(tc * 4));
-    const pt = (tc * 4) - pi;
-    switch (pi) {
-      case 0: return pt;
-      case 1: return 1 - pt;
-      case 2: return pt;
-      case 3: return 1 - pt;
-      default: return 0;
     }
   }
 
@@ -356,8 +321,5 @@ export class Engine3DRenderer {
 function lerpColor(a: number, b: number, t: number): number {
   const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
   const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
-  const r = Math.round(ar + (br - ar) * t);
-  const g = Math.round(ag + (bg - ag) * t);
-  const bv = Math.round(ab + (bb - ab) * t);
-  return (r << 16) | (g << 8) | bv;
+  return (Math.round(ar + (br - ar) * t) << 16) | (Math.round(ag + (bg - ag) * t) << 8) | Math.round(ab + (bb - ab) * t);
 }
